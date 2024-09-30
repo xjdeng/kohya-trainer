@@ -56,59 +56,64 @@ CAPTION_REPLACEMENTS = [
 ]
 
 def clean_tags(image_key, tags):
-  tags = tags.replace('^_^', '^@@@^')
-  tags = tags.replace('_', ' ')
-  tags = tags.replace('^@@@^', '^_^')
+    print(f"[DEBUG] Cleaning tags for image: {image_key}")
+    tags = tags.replace('^_^', '^@@@^')
+    tags = tags.replace('_', ' ')
+    tags = tags.replace('^@@@^', '^_^')
 
-  tokens = tags.split(", rating")
-  if len(tokens) == 1:
-    pass
-  else:
-    if len(tokens) > 2:
-      print("multiple ratings:")
-      print(f"{image_key} {tags}")
-    tags = tokens[0]
+    tokens = tags.split(", rating")
+    if len(tokens) == 1:
+        pass
+    else:
+        if len(tokens) > 2:
+            print(f"[WARNING] Multiple ratings found for {image_key}: {tags}")
+        tags = tokens[0]
 
-  tags = ", " + tags.replace(", ", ", , ") + ", "
-  
-  if 'girls' in tags or 'boys' in tags:
-    for pat in PATTERNS_REMOVE_IN_MULTI:
-      found = pat.findall(tags)
-      if len(found) > 1:
-        tags = pat.sub("", tags)
+    tags = ", " + tags.replace(", ", ", , ") + ", "
 
-    srch_hair_len = PATTERN_HAIR_LENGTH.search(tags)
-    if srch_hair_len:
-      org = srch_hair_len.group()
-      tags = PATTERN_HAIR_LENGTH.sub(", @@@, ", tags)
+    if 'girls' in tags or 'boys' in tags:
+        for pat in PATTERNS_REMOVE_IN_MULTI:
+            found = pat.findall(tags)
+            if len(found) > 1:
+                print(f"[DEBUG] Removing duplicate tag: {found}")
+                tags = pat.sub("", tags)
 
-    found = PATTERN_HAIR.findall(tags)
-    if len(found) > 1:
-      tags = PATTERN_HAIR.sub("", tags)
+        srch_hair_len = PATTERN_HAIR_LENGTH.search(tags)
+        if srch_hair_len:
+            org = srch_hair_len.group()
+            tags = PATTERN_HAIR_LENGTH.sub(", @@@, ", tags)
 
-    if srch_hair_len:
-      tags = tags.replace(", @@@, ", org)
+        found = PATTERN_HAIR.findall(tags)
+        if len(found) > 1:
+            print(f"[DEBUG] Removing duplicate hair tags: {found}")
+            tags = PATTERN_HAIR.sub("", tags)
 
-  found = PATTERN_WORD.findall(tags)
-  for word in found:
-    if re.search(f", ((\w+) )+{word}, ", tags):
-      tags = tags.replace(f", {word}, ", "")
+        if srch_hair_len:
+            tags = tags.replace(", @@@, ", org)
 
-  tags = tags.replace(", , ", ", ")
-  assert tags.startswith(", ") and tags.endswith(", ")
-  tags = tags[2:-2]
-  return tags
+    found = PATTERN_WORD.findall(tags)
+    for word in found:
+        if re.search(f", ((\w+) )+{word}, ", tags):
+            print(f"[DEBUG] Removing duplicate word: {word}")
+            tags = tags.replace(f", {word}, ", "")
+
+    tags = tags.replace(", , ", ", ")
+    assert tags.startswith(", ") and tags.endswith(", ")
+    tags = tags[2:-2]
+    return tags
 
 def clean_caption(caption):
-  for rf, rt in CAPTION_REPLACEMENTS:
-    replaced = True
-    while replaced:
-      bef = caption
-      caption = caption.replace(rf, rt)
-      replaced = bef != caption
-  return caption
+    print(f"[DEBUG] Cleaning caption: {caption}")
+    for rf, rt in CAPTION_REPLACEMENTS:
+        replaced = True
+        while replaced:
+            bef = caption
+            caption = caption.replace(rf, rt)
+            replaced = bef != caption
+    return caption
 
 def count_files(image_paths, metadata):
+    print(f"[DEBUG] Counting files in metadata.")
     counts = Counter({'_captions': 0, '_tags': 0})
 
     for image_key in metadata:
@@ -120,6 +125,7 @@ def count_files(image_paths, metadata):
     return counts
 
 def report_counts(counts, total_files):
+    print(f"[DEBUG] Reporting file counts.")
     for key, value in counts.items():
         if value == total_files:
             print(f"No {key.replace('_', '')} found for any of the {total_files} images")
@@ -129,7 +135,9 @@ def report_counts(counts, total_files):
             print(f"{total_files - value}/{total_files} images have {key.replace('_', '')}")
 
 def merge_metadata(image_paths, metadata, full_path):
+    print(f"[DEBUG] Merging metadata for {len(image_paths)} images.")
     for image_path in tqdm(image_paths):
+        print(f"[DEBUG] Processing image {image_path}")
         tags_path = image_path.with_suffix(TAGS_EXT)
         if not tags_path.exists():
             tags_path = image_path.joinpath(TAGS_EXT)
@@ -145,10 +153,12 @@ def merge_metadata(image_paths, metadata, full_path):
         if tags_path.is_file():
             tags = tags_path.read_text(encoding='utf-8').strip()
             metadata[image_key]['tags'] = tags
+            print(f"[DEBUG] Added tags for {image_key}: {tags}")
 
         if caption_path.is_file():
             caption = caption_path.read_text(encoding='utf-8').strip()
             metadata[image_key]['caption'] = caption
+            print(f"[DEBUG] Added caption for {image_key}: {caption}")
 
     counts = count_files(image_paths, metadata)
     report_counts(counts, len(image_paths))
@@ -156,32 +166,39 @@ def merge_metadata(image_paths, metadata, full_path):
     return metadata
 
 def clean_metadata(metadata):
+    print(f"[DEBUG] Cleaning metadata for {len(metadata)} images.")
     image_keys = list(metadata.keys())
     for image_key in tqdm(image_keys):
         tags = metadata[image_key].get('tags')
         if tags is not None:
-            org = tags
+            print(f"[DEBUG] Original tags for {image_key}: {tags}")
             tags = clean_tags(image_key, tags)
             metadata[image_key]['tags'] = tags
+            print(f"[DEBUG] Cleaned tags for {image_key}: {tags}")
 
         caption = metadata[image_key].get('caption')
         if caption is not None:
-            org = caption
+            print(f"[DEBUG] Original caption for {image_key}: {caption}")
             caption = clean_caption(caption)
             metadata[image_key]['caption'] = caption
-            
+            print(f"[DEBUG] Cleaned caption for {image_key}: {caption}")
+
     return metadata
 
 def main(args):
+    print(f"[DEBUG] Starting script with arguments: {args}")
     assert not args.recursive or (args.recursive and args.full_path), "--recursive requires --full_path!"
 
     train_data_dir_path = Path(args.train_data_dir)
+    print(f"[DEBUG] train_data_dir_path: {train_data_dir_path}")
+    
     image_paths: List[Path] = train_util.glob_images_pathlib(train_data_dir_path, args.recursive)
     print(f"Found {len(image_paths)} images.")
 
     if args.in_json is not None:
         print(f"Loading existing metadata: {args.in_json}")
         metadata = json.loads(Path(args.in_json).read_text(encoding='utf-8'))
+        print(f"[DEBUG] Loaded metadata from {args.in_json}")
         print("Metadata for existing images will be overwritten")
     else:
         print("Creating a new metadata file")
@@ -219,6 +236,7 @@ def setup_parser() -> argparse.ArgumentParser:
     return parser
 
 if __name__ == '__main__':
+    print("Here")
     parser = setup_parser()
 
     args = parser.parse_args()
